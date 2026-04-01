@@ -233,6 +233,10 @@ def main():
 
     # Options
     parser.add_argument(
+        "--app-path",
+        help="Path to .app bundle — when used with --launch, installs the build before launching",
+    )
+    parser.add_argument(
         "--wait-for-debugger", action="store_true", help="Wait for debugger when launching"
     )
     parser.add_argument(
@@ -253,6 +257,11 @@ def main():
 
     # Execute requested action
     if args.launch:
+        if args.app_path:
+            if not launcher.install(args.app_path):
+                print(f"Failed to install {args.app_path}")
+                sys.exit(1)
+            print(f"Installed {args.app_path}")
         success, pid = launcher.launch(args.launch, args.wait_for_debugger)
         if success:
             if pid:

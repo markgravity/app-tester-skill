@@ -185,16 +185,30 @@ python ~/.claude/skills/app-tester/scripts/dismiss_prompts.py \
 
 Different alert types require different strategies. Choose based on the alert's source process.
 
+#### General rule
+
+When any unexpected dialog blocks a flow step:
+
+1. Run `idb ui describe-all --json` and check if the dialog's buttons appear in the output.
+2. **If visible** — it runs in-process. Tap the dismiss button by coordinate (see [D]).
+3. **If not visible** — it runs in a separate OS process (e.g. `com.apple.AuthKitUIService`). idb cannot interact with it; use credential injection to bypass the flow entirely (see [C]).
+
+Add recurring dismiss labels (e.g. `"Not Now"`, `"Ask App Not to Track"`) to `SYSTEM_PROMPT_DISMISS` in `.env` so `dismiss_prompts.py` handles them automatically on every launch and tap.
+
 #### Quick decision tree
 
 ```
 System alert appeared?
- ├─ It's a permission dialog (location, camera, contacts, notifications)?
- │   → Pre-grant via simctl privacy (preferred) — see [A] below
- ├─ It's ATT (App Tracking Transparency)?
- │   → Tap via idb — runs in-process, idb CAN see it — see [B] below
- └─ It's Sign In with Apple?
-     → Cannot tap — runs in a separate OS process — see [C] below
+ ├─ Permission dialog (location, camera, contacts, notifications)?
+ │   → Pre-grant via simctl privacy before launch — see [A]
+ │   → Or tap via idb if dialog still appears (visible in screen tree)
+ ├─ ATT (App Tracking Transparency)?
+ │   → Tap via idb — visible in screen tree — see [B]
+ ├─ Sign In with Apple?
+ │   → Cross-process — bypass via credential injection — see [C]
+ └─ Unknown / other dialog?
+     → Run idb ui describe-all — if visible, tap dismiss — see [D]
+     → If not visible, it's cross-process — use credential injection — see [C]
 ```
 
 ---
@@ -269,9 +283,9 @@ Or add `"Ask App Not to Track"` to `SYSTEM_PROMPT_DISMISS` in `.env` — `dismis
 
 ---
 
-#### [C] Sign In with Apple — cannot tap, use credential injection
+#### [C] Sign In with Apple — cross-process, use credential injection
 
-Sign In with Apple runs in **`com.apple.AuthKitUIService`** — a separate OS process. `idb ui describe-all` cannot see its elements. Coordinate tapping is unreliable and returns `ASAuthorizationError error 1000` on simulator.
+Sign In with Apple runs in **`com.apple.AuthKitUIService`** — a separate OS process. `idb ui describe-all` cannot see its elements. Coordinate tapping returns `ASAuthorizationError error 1000` on simulator.
 
 **Solution: bypass the Apple sheet entirely — inject an email/password session via launch arguments**
 
@@ -340,11 +354,64 @@ Check console output for your success log line (e.g. `[Auth] test sign-in succee
 
 ---
 
-### 3.3 Build and launch
+#### [D] Unknown in-process dialog — general dismiss pattern
+
+Use this when an unexpected dialog blocks a flow step and `idb ui describe-all` shows it in the accessibility tree.
+
+**Step 1 — Identify the dismiss button and its center:**
 
 ```bash
+idb ui describe-all --json | python3 -c "
+import json, sys, re
+nodes = json.load(sys.stdin)
+for n in nodes:
+    label = n.get('AXLabel', '')
+    # Print all buttons/static text so you can identify the dialog
+    if label:
+        nums = [float(x) for x in re.findall(r'[\d.]+', n.get('AXFrame',''))]
+        if len(nums) == 4:
+            cx, cy = int(nums[0] + nums[2]/2), int(nums[1] + nums[3]/2)
+            print(f'{label!r}: center=({cx},{cy})')
+"
+```
+
+**Step 2 — Tap the dismiss button by coordinate:**
+
+```bash
+idb ui tap <cx> <cy>
+```
+
+**Step 3 — Add to `SYSTEM_PROMPT_DISMISS` so it's handled automatically:**
+
+```bash
+# .env
+SYSTEM_PROMPT_DISMISS=Not Now,Ask App Not to Track,Don't Allow,Allow Once,OK,Allow
+```
+
+`dismiss_prompts.py` runs after every launch and tap and dismisses any button whose label matches.
+
+> **Example — "Apple Account Verification" dialog** (simulator Apple ID re-verification):
+> Text: *"Enter the password for \<email\> in Settings."* — Buttons: **Not Now**, **Settings**.
+> This is in-process and idb-visible. Dismiss before interacting with the Sign in with Apple sheet, otherwise taps land on the dialog instead.
+> `idb ui tap 127 507` (Not Now, standard iPhone simulator 402×874 pt)
+
+---
+
+### 3.3 Build and launch
+
+> **IMPORTANT:** Always pass `--app-path` when launching after a build. `--launch` alone only starts the already-installed binary — the simulator will silently run the stale build if you skip this.
+
+```bash
+# Find the built .app path
+APP_PATH=$(xcodebuild -scheme <Scheme> -destination 'platform=iOS Simulator,name=<Device>' \
+  -showBuildSettings 2>/dev/null | grep ' CODESIGNING_FOLDER_PATH' | awk '{print $3}')
+
+# Build
 xcodebuild -scheme <Scheme> -destination 'platform=iOS Simulator,name=<Device>' build
-python ~/.claude/skills/app-tester/scripts/app_launcher.py --launch <bundle.id>
+
+# Install the new build then launch — single command
+python ~/.claude/skills/app-tester/scripts/app_launcher.py \
+  --launch <bundle.id> --app-path "$APP_PATH"
 ```
 
 ### 3.4 Navigate each step
