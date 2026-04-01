@@ -167,7 +167,7 @@ Read `.claude/app-flow-graph.json`. Target flow(s) by name or all `"enabled": tr
 ### 3.2 Pre-grant permissions
 
 ```bash
-python ~/.claude/skills/app-tester/scripts/privacy_manager.py \
+python3 ~/.claude/skills/app-tester/scripts/privacy_manager.py \
   --bundle-id <bundle.id> --grant camera,location,notifications
 ```
 
@@ -175,7 +175,7 @@ python ~/.claude/skills/app-tester/scripts/privacy_manager.py \
 
 Run after every launch and every tap (no-op if no dialog):
 ```bash
-python ~/.claude/skills/app-tester/scripts/dismiss_prompts.py \
+python3 ~/.claude/skills/app-tester/scripts/dismiss_prompts.py \
   --policy "$SYSTEM_PROMPT_DISMISS"
 ```
 
@@ -231,7 +231,7 @@ xcrun simctl privacy booted revoke location  dev.example.app
 
 Use `privacy_manager.py` to grant multiple at once from `TEST_PERMISSIONS`:
 ```bash
-python ~/.claude/skills/app-tester/scripts/privacy_manager.py \
+python3 ~/.claude/skills/app-tester/scripts/privacy_manager.py \
   --bundle-id dev.example.app --grant camera,location,notifications
 ```
 
@@ -401,6 +401,8 @@ SYSTEM_PROMPT_DISMISS=Not Now,Ask App Not to Track,Don't Allow,Allow Once,OK,All
 
 > **IMPORTANT:** Always pass `--app-path` when launching after a build. `--launch` alone only starts the already-installed binary — the simulator will silently run the stale build if you skip this.
 
+> **Log capture method:** Swift `print()` writes to **stdout**, not the unified logging system. `log stream` will NOT capture these. Always launch with `--console-pty` and redirect to a file so log confirmation in 3.4 works. If the app uses `os_log`/`Logger` instead, you can use `log stream` as a fallback.
+
 ```bash
 # Find the built .app path
 APP_PATH=$(xcodebuild -scheme <Scheme> -destination 'platform=iOS Simulator,name=<Device>' \
@@ -409,26 +411,27 @@ APP_PATH=$(xcodebuild -scheme <Scheme> -destination 'platform=iOS Simulator,name
 # Build
 xcodebuild -scheme <Scheme> -destination 'platform=iOS Simulator,name=<Device>' build
 
-# Install the new build then launch — single command
-python ~/.claude/skills/app-tester/scripts/app_launcher.py \
-  --launch <bundle.id> --app-path "$APP_PATH"
+# Install then launch capturing stdout (required for print()-based log confirmation)
+xcrun simctl install booted "$APP_PATH"
+xcrun simctl terminate booted <bundle.id> 2>/dev/null; sleep 1
+xcrun simctl launch --console-pty booted <bundle.id> > /tmp/app_logs.txt 2>&1 &
 ```
 
 ### 3.4 Navigate each step
 
 **Confirm current screen:**
 ```bash
-python ~/.claude/skills/app-tester/scripts/screen_mapper.py
+python3 ~/.claude/skills/app-tester/scripts/screen_mapper.py
 ```
 
 **Tap by accessibility ID:**
 ```bash
-python ~/.claude/skills/app-tester/scripts/navigator.py --find-id "primary_action_button" --tap
+python3 ~/.claude/skills/app-tester/scripts/navigator.py --find-id "primary_action_button" --tap
 ```
 
-**Confirm via log (3s capture):**
+**Confirm via log:**
 ```bash
-python ~/.claude/skills/app-tester/scripts/log_monitor.py --app <bundle.id> --duration 3s | grep "\[AppName\]"
+grep "\[AppName\]" /tmp/app_logs.txt | tail -5
 ```
 
 **Mark step:** PASSED if log confirmed or accessibility ID found. FAILED → enter Phase 4 immediately (inline recovery). Resume Phase 3 from the current step after recovery succeeds. Only move on to the next step once the current step is confirmed PASSED.
@@ -541,11 +544,11 @@ Triggered immediately when a step fails during Phase 3. The goal is always to **
 ```bash
 # iOS
 xcrun simctl io booted screenshot /tmp/flow_failure_step<N>.png
-python ~/.claude/skills/app-tester/scripts/screen_mapper.py --verbose
+python3 ~/.claude/skills/app-tester/scripts/screen_mapper.py --verbose
 
 # macOS
 screencapture -x /tmp/flow_failure_step<N>.png
-python ~/.claude/skills/app-tester/scripts/macos_screen_mapper.py --app <AppName>
+python3 ~/.claude/skills/app-tester/scripts/macos_screen_mapper.py --app <AppName>
 ```
 
 Read the screenshot and accessibility tree together to understand exactly what's on screen.
