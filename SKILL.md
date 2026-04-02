@@ -553,19 +553,108 @@ python3 ~/.claude/skills/app-tester/scripts/macos_screen_mapper.py --app <AppNam
 
 Read the screenshot and accessibility tree together to understand exactly what's on screen.
 
-### 4.2 Diagnose the failure
+### 4.2 Diagnose: app bug vs test infra issue
 
-| Symptom | Likely cause | Recovery action |
-|---|---|---|
-| Element not found by ID | Accessibility ID mismatch or missing | Fix in Swift source → rebuild → retry |
-| No log line appeared | Log statement missing | Add log to Swift source → rebuild → retry |
-| Auth/login screen shown | Step requires authentication | Supply credentials from `.env`, log in, then resume from next step |
-| Same screen stays visible | Button disabled / gate not met | Check source for guard conditions; satisfy prerequisite, retry |
-| Unexpected screen shown | Navigation logic changed | Re-read nav source; update graph edge; find new path forward |
-| Crash / blank screen | Runtime error | Read full log output; fix the crash; relaunch from step 1 |
-| `not running` from screen_mapper | App crashed or hasn't launched | Relaunch app, re-navigate to step's screen |
+Classify the failure before acting — the recovery path differs.
 
-### 4.3 Read the source file
+| Symptom | Type | Likely cause | Recovery path |
+|---|---|---|---|
+| Element not found by ID | Test infra | Accessibility ID missing or mismatched | → Section 4.4 |
+| No log line appeared | Test infra | `print()` statement absent | → Section 4.4 |
+| Wrong accessibility ID in graph | Test infra | Graph out of sync with source | → Section 4.4 |
+| Auth/login screen shown | Test infra | Missing credentials / session | Supply credentials; log in; resume |
+| Tap succeeds but wrong screen appears | **App bug** | Navigation logic routes incorrectly | → Section 4.3 |
+| Tap succeeds but no transition happens | **App bug** | Guard condition blocks nav, or handler missing | → Section 4.3 |
+| Button not visible when it should be | **App bug** | Conditional render logic incorrect | → Section 4.3 |
+| Crash / blank screen | **App bug** | Runtime error in Swift source | → Section 4.3 |
+| `not running` from screen_mapper | **App bug** | App crashed at launch or during step | → Section 4.3 |
+| Same screen stays visible | Either | Button disabled by guard, OR tap missed element | Check source; if guard logic wrong → 4.3; if ID wrong → 4.4 |
+| Unexpected screen shown | Either | Navigation logic changed, OR graph stale | Re-read nav source; update graph if stale; if logic wrong → 4.3 |
+
+> **Rule of thumb:** If the app ran the code but produced the wrong result, it's an app bug. If the test couldn't drive the app correctly (wrong ID, missing log, wrong credentials), it's a test infra issue.
+
+---
+
+### 4.3 App Bug Fix Loop
+
+Use when the failure is an **app bug** — incorrect Swift logic, not a test setup problem.
+
+**Loop until the step PASSES or is declared unresolvable:**
+
+#### Step A — Identify the buggy file
+
+From the graph node's `swiftFile`, the related ViewModel, or the crash log, identify which Swift file(s) contain the defect. Read them:
+
+```bash
+# Check recent crash or error in logs
+grep -E "error|crash|fatal|Exception" /tmp/app_logs.txt | tail -20
+
+# Or read the screen source directly
+# Use the Read tool on the swiftFile path from the graph node
+```
+
+#### Step B — Fix the bug
+
+Read the Swift source and apply a targeted fix. Common bug patterns:
+
+| Bug pattern | What to look for |
+|---|---|
+| Wrong screen navigated to | Navigation call has wrong `Screen` case or params |
+| Navigation never fires | Missing call in action closure, or async `Task {}` not awaited |
+| Button not shown | `if`/`guard` condition using wrong state variable |
+| Crash on tap | Force-unwrap (`!`) on nil, index out of bounds, or missing guard |
+| State not updated | `@Observable` property not mutated before navigation |
+
+Fix the source using the Edit tool. Keep changes minimal and targeted.
+
+#### Step C — Rebuild and reinstall
+
+```bash
+# iOS
+xcodebuild -scheme <Scheme> -destination 'platform=iOS Simulator,name=<Device>' build 2>&1 | tail -20
+
+APP_PATH=$(xcodebuild -scheme <Scheme> -destination 'platform=iOS Simulator,name=<Device>' \
+  -showBuildSettings 2>/dev/null | grep ' CODESIGNING_FOLDER_PATH' | awk '{print $3}')
+
+xcrun simctl terminate booted <bundle.id> 2>/dev/null; sleep 1
+xcrun simctl install booted "$APP_PATH"
+xcrun simctl launch --console-pty booted <bundle.id> > /tmp/app_logs.txt 2>&1 &
+
+# macOS
+xcodebuild -scheme <Scheme> -destination 'platform=macOS' build 2>&1 | tail -20
+osascript -e 'tell application "<AppName>" to quit' 2>/dev/null; sleep 1
+python3 ~/.claude/skills/app-tester/scripts/macos_launcher.py --launch "$APP_PATH" --capture-stdout /tmp/macos_logs.txt
+```
+
+If the build fails — read the error, fix it, and rebuild before continuing.
+
+#### Step D — Re-navigate to the failing step
+
+Navigate from the app's launch screen back to the step that previously failed. Use the flow's steps list as your guide — re-execute each prior step in order.
+
+#### Step E — Retry the failing step
+
+Attempt the exact action that failed:
+1. Confirm you're on the correct screen (accessibility ID or log)
+2. Perform the tap/action
+3. Confirm the transition (log line or screen ID)
+
+**If PASSED** → continue the flow from the next step. Record the fix in the graph (see 4.7).
+
+**If still FAILED** → diagnose again from Step A. The fix may have been incomplete or revealed a second bug. Loop back and repeat.
+
+#### When to stop looping
+
+Declare the step **unresolvable** (→ Section 4.8) only when:
+- The root cause requires infrastructure changes outside the app code (e.g. backend not running, missing test data that can't be created programmatically)
+- The fix requires significant feature work that can't be done inline
+- Three full fix-and-retry cycles have failed with no progress
+
+---
+
+### 4.4 Fix Missing Instrumentation (Test Infra)
+
+Use when the failure is a **test infra issue** — missing accessibility ID, missing log, or wrong ID in graph.
 
 Open the screen's `swiftFile` from the graph node:
 - Is `.accessibilityIdentifier()` present and matching the graph's `accessibilityId`?
@@ -573,9 +662,7 @@ Open the screen's `swiftFile` from the graph node:
 - Is the tap log before the navigation call?
 - Did the navigation call change (different screen, different transition)?
 
-### 4.4 Fix instrumentation if missing
-
-If accessibility ID or log is absent or wrong, add/correct it now:
+If accessibility ID or log is absent or wrong, add/correct it:
 
 ```swift
 // Add to outermost container
@@ -588,14 +675,7 @@ print("[AppName] [Feature] ScreenName appeared")
 print("[AppName] [Feature] actionName tapped")
 ```
 
-Then rebuild:
-```bash
-# iOS
-xcodebuild -scheme <Scheme> -destination 'platform=iOS Simulator,name=<Device>' build
-
-# macOS
-xcodebuild -scheme <Scheme> -destination 'platform=macOS' build
-```
+Then rebuild and reinstall (same commands as Section 4.3 Step C).
 
 ### 4.5 Find a way to the next step
 
@@ -639,7 +719,7 @@ Also update `updatedAt` in the graph root to the current ISO-8601 timestamp.
 
 If the flow cannot be unblocked after all recovery attempts:
 - Set `"lastResult": "FAILED"` on the flow
-- Set `"failureNote"` describing exactly which step failed and why
+- Set `"failureNote"` describing exactly which step failed, the root cause, and why it's unresolvable inline
 - Continue testing remaining flows (don't abort the full run)
 - On next run, Phase 0 will flag this flow as requiring re-test after fixes
 
