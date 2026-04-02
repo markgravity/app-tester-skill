@@ -26,9 +26,10 @@ Tests iOS and macOS app navigation flows without relying on screenshots. Works o
 ```
 ~/.claude/skills/app-tester/scripts/
   iOS:
+    ios.py                — unified entry point: tap, swipe, screenshot, logs
     app_launcher.py       — launch/terminate via xcrun simctl
     screen_mapper.py      — read accessibility tree via idb
-    navigator.py          — tap/interact via idb
+    navigator.py          — tap/interact via idb (used by ios.py)
     log_monitor.py        — stream simulator logs
     privacy_manager.py    — pre-grant permissions
     dismiss_prompts.py    — dismiss system dialogs
@@ -427,7 +428,22 @@ python3 ~/.claude/skills/app-tester/scripts/screen_mapper.py
 
 **Tap by accessibility ID:**
 ```bash
-python3 ~/.claude/skills/app-tester/scripts/navigator.py --find-id "primary_action_button" --tap
+python3 ~/.claude/skills/app-tester/scripts/ios.py tap --id "primary_action_button"
+```
+
+**Tap by label (fuzzy):**
+```bash
+python3 ~/.claude/skills/app-tester/scripts/ios.py tap --text "Create Game"
+```
+
+**Swipe:**
+```bash
+python3 ~/.claude/skills/app-tester/scripts/ios.py swipe --from 195,700 --to 195,200
+```
+
+**Screenshot on failure:**
+```bash
+python3 ~/.claude/skills/app-tester/scripts/ios.py screenshot --size half
 ```
 
 **Confirm via log:**
