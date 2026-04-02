@@ -17,7 +17,7 @@ description: >
 Tests iOS and macOS app navigation flows without relying on screenshots. Works on any SwiftUI or UIKit project.
 
 **Strategy:**
-1. Read the project's navigation source to build `.claude/app-flow-graph.json` at the project root.
+1. Read the project's navigation source to build `.tester/app-graph.yaml` and `.tester/flows/*.yaml` at the project root.
 2. Instrument screen files with structured `print` logs and `.accessibilityIdentifier()`.
 3. Drive flows by tapping accessibility IDs and confirming transitions via console logs.
 4. Take screenshots **only when a step fails**.
@@ -79,7 +79,7 @@ Identify these values before any phase:
 
 ## Phase 1: App Discovery
 
-Run when `.claude/app-flow-graph.json` does not exist, the navigation source has changed, or the user says "rebuild the graph".
+Run when `.tester/app-graph.yaml` does not exist, the navigation source has changed, or the user says "rebuild the graph".
 
 ### 1.1 Read the navigation source
 
@@ -101,7 +101,7 @@ Group screens by directory structure, naming conventions, or functional area.
 
 ### 1.4 Write the graph
 
-Create `.claude/app-flow-graph.json` at the project root. See **Graph Schema** below.
+Create `.tester/app-graph.yaml` at the project root (screens + metadata). For each named flow, create a separate `.tester/flows/<flow-id>.yaml` file using the kebab-case flow name (e.g. `create-game.yaml`, `edit-profile.yaml`). See **Graph Schema** below.
 
 ---
 
@@ -163,7 +163,7 @@ xcodebuild -scheme <Scheme> -destination 'platform=macOS' build
 
 ### 3.1 Load the graph
 
-Read `.claude/app-flow-graph.json`. Target flow(s) by name or all `"enabled": true` flows.
+Read `.tester/app-graph.yaml` for screen data. Read flow files from `.tester/flows/` — target by name or all files with `enabled: true`.
 
 ### 3.2 Pre-grant permissions
 
@@ -455,7 +455,7 @@ Flow: Create Game  Status: PASSED ✓
 
 ### 3.1 Load the graph
 
-Same as iOS — read `.claude/app-flow-graph.json`.
+Same as iOS — read `.tester/app-graph.yaml` and flow files from `.tester/flows/`.
 
 ### 3.2 Build and launch
 
@@ -699,22 +699,18 @@ If it passes → continue the flow from the next step.
 
 After recovery (whether the step passed or the flow was fully unblocked):
 
-```json
-// Updated node (example)
-{
-  "accessibilityId": "corrected_screen_id",
-  "transitions": [
-    {
-      "action": "updated_action_name",
-      "actionAccessibilityId": "corrected_button_id",
-      "nextScreen": "actualNextScreen",
-      "logConfirmation": "[AppName] [Feature] ActualScreen appeared"
-    }
-  ]
-}
+```yaml
+# Updated node (example) — edit .tester/app-graph.yaml
+accessibilityId: corrected_screen_id
+transitions:
+  - action: updated_action_name
+    actionAccessibilityId: corrected_button_id
+    nextScreen: actualNextScreen
+    logConfirmation: "[AppName] [Feature] ActualScreen appeared"
 ```
 
-Also update `updatedAt` in the graph root to the current ISO-8601 timestamp.
+Also update `updatedAt` in `.tester/app-graph.yaml` to the current ISO-8601 timestamp.
+If `lastResult` changes, update it in the relevant `.tester/flows/<flow-id>.yaml`.
 
 ### 4.8 If recovery fails
 
@@ -728,63 +724,57 @@ If the flow cannot be unblocked after all recovery attempts:
 
 ## Graph Schema
 
-File: `.claude/app-flow-graph.json` at project root.
+### `.tester/app-graph.yaml` — app metadata + screens
 
-```json
-{
-  "version": 1,
-  "updatedAt": "ISO-8601 timestamp",
-  "appName": "YourAppName",
-  "bundleId": "com.example.yourapp",
-  "platform": "ios | macos",
-  "projectRoot": "/absolute/path/to/project",
-  "navSourceFiles": [
-    "relative/path/to/Navigator+Screen.swift",
-    "relative/path/to/NavigatorStack.swift"
-  ],
-  "screens": {
-    "screenId": {
-      "screenId": "gameList",
-      "displayName": "Game List",
-      "feature": "Game",
-      "swiftFile": "relative/path/GameListView.swift",
-      "accessibilityId": "game_list_screen",
-      "notes": "optional",
-      "transitions": [
-        {
-          "action": "create_game_button",
-          "actionAccessibilityId": "primary_action_button",
-          "nextScreen": "createGame",
-          "transition": "presentCover",
-          "logConfirmation": "[AppName] [Feature] ScreenName appeared"
-        }
-      ]
-    }
-  },
-  "namedFlows": {
-    "flowId": {
-      "name": "Human readable name",
-      "description": "What this flow validates",
-      "enabled": true,
-      "lastResult": "PASSED | FAILED | UNKNOWN",
-      "failureNote": null,
-      "steps": [
-        {
-          "stepId": 1,
-          "fromScreen": "screenId",
-          "toScreen": "screenId",
-          "action": "accessibilityId or null",
-          "logConfirmation": "[AppName] [Feature] ScreenName appeared",
-          "prerequisites": ["plain-English required state"]
-        }
-      ]
-    }
-  }
-}
+```yaml
+version: 1
+updatedAt: "2024-01-15T10:30:00Z"
+appName: YourAppName
+bundleId: com.example.yourapp
+platform: ios  # ios | macos
+projectRoot: /absolute/path/to/project
+navSourceFiles:
+  - relative/path/to/Navigator+Screen.swift
+  - relative/path/to/NavigatorStack.swift
+
+screens:
+  gameList:
+    screenId: gameList
+    displayName: Game List
+    feature: Game
+    swiftFile: relative/path/GameListView.swift
+    accessibilityId: game_list_screen
+    notes: optional
+    transitions:
+      - action: create_game_button
+        actionAccessibilityId: primary_action_button
+        nextScreen: createGame
+        transition: presentCover
+        logConfirmation: "[AppName] [Feature] ScreenName appeared"
+```
+
+### `.tester/flows/<flow-id>.yaml` — one file per named flow
+
+Filename is the kebab-case flow ID (e.g. `create-game.yaml`, `edit-profile.yaml`).
+
+```yaml
+name: Human readable name
+description: What this flow validates
+enabled: true
+lastResult: PASSED  # PASSED | FAILED | UNKNOWN
+failureNote: null
+steps:
+  - stepId: 1
+    fromScreen: gameList
+    toScreen: createGame
+    action: primary_action_button  # accessibilityId or null
+    logConfirmation: "[AppName] [Feature] ScreenName appeared"
+    prerequisites:
+      - plain-English required state
 ```
 
 **Field notes:**
-- `platform` — `"ios"` or `"macos"`; drives which Phase 3 scripts to use
+- `platform` — `ios` or `macos`; drives which Phase 3 scripts to use
 - `accessibilityId` — snake_case; set via `.accessibilityIdentifier()` in Swift
 - `action` — `null` / `auto_on_*` for programmatic transitions; use `--find-text` label for macOS toolbar items
 - `logConfirmation` — exact prefix to grep in console output
@@ -797,7 +787,7 @@ Run this before Phase 3 every time. Determines whether to trust the existing gra
 
 ### 0.1 Check if graph exists
 
-If `.claude/app-flow-graph.json` is missing → run Phase 1 now, then Phase 2, then Phase 3.
+If `.tester/app-graph.yaml` is missing → run Phase 1 now, then Phase 2, then Phase 3.
 
 ### 0.2 Compare navigation source against graph
 

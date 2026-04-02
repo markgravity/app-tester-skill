@@ -10,7 +10,7 @@ Builds a persistent graph of your app's screens, instruments Swift files with st
 2. **Instruments** each screen with `.accessibilityIdentifier()` and `print("[AppName] [Feature] ScreenName appeared")` logs
 3. **Drives flows** by tapping accessibility IDs and confirming transitions via console log lines
 4. **Recovers inline** when a step breaks — reads source, fixes instrumentation, finds an alternate path, updates the graph, and continues
-5. **Persists** everything in `.claude/app-flow-graph.json` at the project root, with staleness detection on every run
+5. **Persists** everything in `.tester/app-graph.yaml` (screens) and `.tester/flows/*.yaml` (one file per flow) at the project root, with staleness detection on every run
 
 ## Installation
 
@@ -52,12 +52,16 @@ TEST_PERMISSIONS=camera,location,notifications
 SYSTEM_PROMPT_DISMISS=Ask App Not to Track,Don't Allow,Allow Once,Not Now,Dismiss,OK,Allow
 ```
 
-## Graph file
+## Graph files
 
-The skill stores a screen graph at `.claude/app-flow-graph.json` in your project. Each run:
+The skill stores data in `.tester/` at your project root:
+- `.tester/app-graph.yaml` — app metadata and screen graph (screens, transitions, accessibility IDs)
+- `.tester/flows/<flow-id>.yaml` — one file per named flow (kebab-case filename)
+
+Each run:
 - Checks if navigation source files changed since last run
 - Diffs old vs new screens and marks affected flows for re-testing
-- Updates `lastResult` (PASSED / FAILED / UNKNOWN) per flow after each run
+- Updates `lastResult` (PASSED / FAILED / UNKNOWN) in each flow file after each run
 
 ## Bundled scripts
 
