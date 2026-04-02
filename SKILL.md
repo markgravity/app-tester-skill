@@ -5,9 +5,10 @@ description: >
   project's navigation source to understand flows, instruments Swift screen files with
   structured print logs and .accessibilityIdentifier() modifiers, then drives flows
   end-to-end using console logs and the accessibility tree — without requiring screenshots.
-  Use when: (1) user says "test the [flow] flow", "test all flows", "instrument screens",
-  "update the flow graph", "rebuild the graph", "run flow tests", or "check that [feature]
-  works end to end", (2) after adding or modifying screens or navigation logic,
+  Use when: (1) user says "test this", "test it", "test [feature/screen/flow]",
+  "test the [flow] flow", "test all flows", "instrument screens", "update the flow graph",
+  "rebuild the graph", "run flow tests", or "check that [feature] works end to end",
+  (2) after adding or modifying screens or navigation logic,
   (3) when debugging a broken navigation flow. Works on iOS simulator and macOS.
 ---
 
