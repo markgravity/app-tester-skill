@@ -21,14 +21,14 @@ import sys
 
 def get_accessibility_tree(udid: str | None = None, nested: bool = True) -> dict:
     """
-    Fetch accessibility tree from IDB.
+    Fetch accessibility tree from AXe.
 
     The accessibility tree represents the complete UI hierarchy of the current
     screen, with all element properties needed for semantic navigation.
 
     Args:
         udid: Device UDID (uses booted simulator if None)
-        nested: Include nested structure (default True). If False, returns flat array.
+        nested: Unused — AXe always returns nested format.
 
     Returns:
         Root element of accessibility tree as dict.
@@ -40,15 +40,13 @@ def get_accessibility_tree(udid: str | None = None, nested: bool = True) -> dict
         }
 
     Raises:
-        SystemExit: If IDB command fails or returns invalid JSON
+        SystemExit: If axe command fails or returns invalid JSON
 
     Example:
         tree = get_accessibility_tree("UDID123")
         # Root is Window element with all children nested
     """
-    cmd = ["idb", "ui", "describe-all", "--json"]
-    if nested:
-        cmd.append("--nested")
+    cmd = ["axe", "describe-ui"]
     if udid:
         cmd.extend(["--udid", udid])
 
@@ -56,7 +54,7 @@ def get_accessibility_tree(udid: str | None = None, nested: bool = True) -> dict
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         tree_data = json.loads(result.stdout)
 
-        # IDB returns array format, extract first element (root)
+        # AXe returns array format, extract first element (root)
         if isinstance(tree_data, list) and len(tree_data) > 0:
             return tree_data[0]
         return tree_data
@@ -64,7 +62,7 @@ def get_accessibility_tree(udid: str | None = None, nested: bool = True) -> dict
         print(f"Error: Failed to get accessibility tree: {e.stderr}", file=sys.stderr)
         sys.exit(1)
     except json.JSONDecodeError:
-        print("Error: Invalid JSON from idb", file=sys.stderr)
+        print("Error: Invalid JSON from axe", file=sys.stderr)
         sys.exit(1)
 
 

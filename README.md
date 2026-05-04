@@ -22,8 +22,8 @@ git clone https://github.com/markgravity/app-tester-skill ~/.claude/skills/app-t
 
 **iOS requirements:**
 ```bash
-brew install idb-companion
-pip install fb-idb
+brew tap cameroncooke/axe
+brew install axe
 ```
 
 **macOS requirements:** None — uses built-in `osascript` and `log`.

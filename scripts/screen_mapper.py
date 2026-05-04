@@ -37,7 +37,7 @@ Output Format (default):
     Focusable: 7 elements
 
 Technical Details:
-- Uses IDB's accessibility tree via `idb ui describe-all --json --nested`
+- Uses AXe's accessibility tree via `axe describe-ui --udid <udid>`
 - Parses IDB's array format: [{ root element with children }]
 - Identifies element types: Button, TextField, NavigationBar, TabBar, etc.
 - Extracts labels from AXLabel, AXValue, and AXUniqueId fields

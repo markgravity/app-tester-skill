@@ -46,11 +46,11 @@ Navigation Priority (best to worst):
     4. Tap at coordinates (last resort, fragile)
 
 Technical Details:
-- Uses IDB's accessibility tree via `idb ui describe-all --json --nested`
+- Uses AXe's accessibility tree via `axe describe-ui --udid <udid>`
 - Caches tree for multiple operations (call with force_refresh to update)
 - Finds elements by parsing tree recursively
-- Calculates tap coordinates from element frame center
-- Uses `idb ui tap` for tapping, `idb ui text` for text entry
+- Taps by accessibility ID (`axe tap --id`) or coordinates (`axe tap -x -y`)
+- Uses `axe type` for text entry
 - Extracts data from AXLabel, AXValue, and AXUniqueId fields
 """
 
@@ -197,13 +197,22 @@ class Navigator:
         return None
 
     def tap(self, element: Element) -> bool:
-        """Tap on an element."""
+        """Tap on an element, preferring accessibility ID over coordinates."""
+        if element.identifier:
+            cmd = ["axe", "tap", "--id", element.identifier]
+            if self.udid:
+                cmd.extend(["--udid", self.udid])
+            try:
+                subprocess.run(cmd, capture_output=True, check=True)
+                return True
+            except subprocess.CalledProcessError:
+                pass
         x, y = element.center
         return self.tap_at(x, y)
 
     def tap_at(self, x: int, y: int) -> bool:
         """Tap at specific coordinates."""
-        cmd = ["idb", "ui", "tap", str(x), str(y)]
+        cmd = ["axe", "tap", "-x", str(x), "-y", str(y)]
         if self.udid:
             cmd.extend(["--udid", self.udid])
 
@@ -234,7 +243,7 @@ class Navigator:
             time.sleep(0.5)
 
         # Enter text
-        cmd = ["idb", "ui", "text", text]
+        cmd = ["axe", "type", text]
         if self.udid:
             cmd.extend(["--udid", self.udid])
 

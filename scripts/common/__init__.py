@@ -6,14 +6,13 @@ while respecting Jackson's Law - no over-abstraction, only truly shared logic.
 
 Organization:
 - device_utils: Device detection, command building, coordinate transformation
-- idb_utils: IDB-specific operations (accessibility tree, element manipulation)
+- idb_utils: AXe-backed operations (accessibility tree, element manipulation)
 - cache_utils: Progressive disclosure caching for large outputs
 - screenshot_utils: Screenshot capture with file and inline modes
 """
 
 from .cache_utils import ProgressiveCache, get_cache
 from .device_utils import (
-    build_idb_command,
     build_simctl_command,
     get_booted_device_udid,
     get_device_screen_size,
@@ -38,7 +37,6 @@ __all__ = [
     # cache_utils
     "ProgressiveCache",
     # device_utils
-    "build_idb_command",
     "build_simctl_command",
     # screenshot_utils
     "capture_screenshot",

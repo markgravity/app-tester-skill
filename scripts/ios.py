@@ -30,7 +30,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from common import (
-    build_idb_command,
     capture_screenshot,
     resolve_udid,
 )
@@ -91,7 +90,13 @@ def cmd_swipe(args) -> int:
     x1, y1 = from_xy
     x2, y2 = to_xy
 
-    cmd = build_idb_command("ui swipe", udid, x1, y1, x2, y2, "--duration", args.duration)
+    cmd = [
+        "axe", "swipe",
+        "--start-x", str(x1), "--start-y", str(y1),
+        "--end-x", str(x2), "--end-y", str(y2),
+        "--duration", str(args.duration),
+        "--udid", udid,
+    ]
     try:
         subprocess.run(cmd, capture_output=True, check=True)
         print(f"Swiped from ({x1}, {y1}) to ({x2}, {y2}) in {args.duration}s")
