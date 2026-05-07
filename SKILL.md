@@ -29,7 +29,10 @@ Android, macOS, tvOS, and Android TV (real devices and simulators).
    identifiers (`testID` / `Semantics` / `.accessibilityIdentifier()`).
 3. Drive flows by `open` → `snapshot -i` → `press`/`fill`/`scroll` → confirm via console
    logs → `close` — all via `agent-device`.
-4. Take screenshots **only when a step fails**.
+4. Take screenshots **only when a step fails**, and write them to `/tmp/` —
+   **never** under `.tester/`. The `.tester/` directory is reserved for the graph
+   (`app-graph.yaml`) and flow YAML files; screenshots, snapshots, and logs are
+   ephemeral debugging artifacts and belong in `/tmp/`.
 
 ## Requirements
 
@@ -576,6 +579,11 @@ agent-device snapshot --verbose > /tmp/flow_failure_step<N>.snapshot.txt
 ```
 
 Read both together to understand exactly what's on screen.
+
+> **Always write screenshots and snapshot dumps to `/tmp/`** — never to `.tester/`.
+> `.tester/` is the source-of-truth graph + flow YAML directory and is git-tracked;
+> ephemeral debug artifacts (screenshots, snapshots, log captures) must stay in `/tmp/`
+> so they aren't committed.
 
 ### 4.2 Diagnose: app bug vs test infra issue
 
