@@ -1,15 +1,15 @@
 # app-tester
 
-A Claude Code skill for testing iOS and macOS app navigation flows — without screenshots.
+A Claude Code skill for testing iOS, macOS, tvOS, and Android app navigation flows — without screenshots — driven by [`agent-device`](https://github.com/callstackincubator/agent-device).
 
-Builds a persistent graph of your app's screens, instruments Swift files with structured logs and accessibility identifiers, then drives flows end-to-end using the accessibility tree and console output. Screenshots are only taken when a step fails.
+Builds a persistent graph of your app's screens, instruments source files with structured logs and accessibility identifiers, then drives flows end-to-end using compact accessibility snapshots and console logs. Screenshots are only taken when a step fails.
 
 ## How it works
 
-1. **Discovers** your app's screens by reading the navigation source (Screen enum, coordinator, etc.)
-2. **Instruments** each screen with `.accessibilityIdentifier()` and `print("[AppName] [Feature] ScreenName appeared")` logs
-3. **Drives flows** by tapping accessibility IDs and confirming transitions via console log lines
-4. **Recovers inline** when a step breaks — reads source, fixes instrumentation, finds an alternate path, updates the graph, and continues
+1. **Discovers** your app's screens by reading the navigation source (Screen enum, GoRoute, Expo Router tree, etc.)
+2. **Instruments** each screen with `.accessibilityIdentifier()` / `Semantics(label:)` / `testID` and `print()` / `console.log()` lines
+3. **Drives flows** via `agent-device` — `open` → `snapshot -i` → `press` / `fill` / `scroll` → `wait` → `close` — confirming each step via console logs
+4. **Recovers inline** when a step breaks — reads source, fixes instrumentation or app bug, re-attaches, retries, updates the graph
 5. **Persists** everything in `.tester/app-graph.yaml` (screens) and `.tester/flows/*.yaml` (one file per flow) at the project root, with staleness detection on every run
 
 ## Installation
@@ -20,13 +20,20 @@ Copy the skill into your personal Claude Code skills directory:
 git clone https://github.com/markgravity/app-tester-skill ~/.claude/skills/app-tester
 ```
 
-**iOS requirements:**
+Then install `agent-device` (Node ≥22 required):
+
 ```bash
-brew tap cameroncooke/axe
-brew install axe
+npm install -g agent-device
+agent-device --version          # confirm >= 0.14.0
+agent-device help workflow      # canonical session loop
 ```
 
-**macOS requirements:** None — uses built-in `osascript` and `log`.
+Platform SDKs are still required for the **build** step:
+
+- iOS / macOS / tvOS: Xcode + Command Line Tools.
+- Android: Android SDK with `adb` on PATH (`$HOME/Library/Android/sdk/platform-tools`).
+- Flutter: `~/fvm/versions/stable/bin/flutter` or `flutter` on PATH.
+- macOS automation: grant Accessibility permission in System Settings → Privacy & Security → Accessibility.
 
 ## Usage
 
@@ -62,21 +69,6 @@ Each run:
 - Checks if navigation source files changed since last run
 - Diffs old vs new screens and marks affected flows for re-testing
 - Updates `lastResult` (PASSED / FAILED / UNKNOWN) in each flow file after each run
-
-## Bundled scripts
-
-| Script | Purpose |
-|---|---|
-| `navigator.py` | Tap elements by accessibility ID, text, or type (iOS, via idb) |
-| `screen_mapper.py` | Read accessibility tree summary (iOS, via idb) |
-| `log_monitor.py` | Stream simulator logs (iOS, via xcrun simctl) |
-| `app_launcher.py` | Launch / terminate app (iOS, via xcrun simctl) |
-| `privacy_manager.py` | Pre-grant permissions (iOS, via xcrun simctl privacy) |
-| `dismiss_prompts.py` | Dismiss any system Alert using a configurable label policy |
-| `macos_navigator.py` | Click toolbar/window elements (macOS, via osascript) |
-| `macos_screen_mapper.py` | Read window/toolbar elements (macOS, via osascript) |
-| `macos_log_monitor.py` | Stream app logs (macOS, via `log stream`) |
-| `macos_launcher.py` | Launch / terminate macOS .app bundles |
 
 ## License
 
